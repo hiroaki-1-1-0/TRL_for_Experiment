@@ -7,13 +7,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# Disabled PR documentation build for fork - only needed for official TRL repository
+# jobs:
+#   build:
+#     if: github.event.pull_request.draft == false
+#     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+#     with:
+#       commit_sha: ${{ github.event.pull_request.head.sha }}
+#       pr_number: ${{ github.event.number }}
+#       package: trl
+#       version_tag_suffix: ""
+#       custom_container: huggingface/transformers-doc-builder
+
 jobs:
-  build:
-    if: github.event.pull_request.draft == false
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
-    with:
-      commit_sha: ${{ github.event.pull_request.head.sha }}
-      pr_number: ${{ github.event.number }}
-      package: trl
-      version_tag_suffix: ""
-      custom_container: huggingface/transformers-doc-builder
+  skip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip PR documentation build
+        run: echo "PR documentation build skipped for fork"

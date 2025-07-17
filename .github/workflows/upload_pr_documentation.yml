@@ -6,11 +6,19 @@ on:
     types:
       - completed
 
+# Disabled upload PR documentation for fork - only needed for official TRL repository
+# jobs:
+#   build:
+#     uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@main
+#     with:
+#       package_name: trl
+#     secrets:
+#       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
+#       comment_bot_token: ${{ secrets.COMMENT_BOT_TOKEN }}
+
 jobs:
-  build:
-    uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@main
-    with:
-      package_name: trl
-    secrets:
-      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
-      comment_bot_token: ${{ secrets.COMMENT_BOT_TOKEN }}
+  skip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip upload PR documentation
+        run: echo "Upload PR documentation skipped for fork"
