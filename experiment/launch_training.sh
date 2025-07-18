@@ -41,7 +41,7 @@ LOG_DIR="./logs"
 cleanup() {
     echo "Cleaning up..."
     # Kill any remaining processes
-    pkill -f "reward_model_training_multi_gpu.py" 2>/dev/null || true
+    pkill -f "reward_model_training_multi_gpu_fixed.py" 2>/dev/null || true
     pkill -f "rloo_helpsteer_training.py" 2>/dev/null || true
     pkill -f "tensorboard" 2>/dev/null || true
     
@@ -92,7 +92,7 @@ train_reward_model() {
         --standalone \
         --nproc_per_node=$NUM_GPUS \
         --max_restarts=0 \
-        reward_model_training_multi_gpu.py \
+        reward_model_training_multi_gpu_fixed.py \
         --model_name "Qwen/Qwen3-8B" \
         --dataset_name "nvidia/HelpSteer3" \
         --output_dir "$REWARD_MODEL_DIR" \
