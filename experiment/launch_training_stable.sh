@@ -1,44 +1,23 @@
 #!/bin/bash
 
-# Fallback Multi-GPU Training Launch Script for Qwen3-4B Reward Model + RLOO
-# Uses 4 GPUs instead of 7 to work around shared memory limitations
+# Stable Single-GPU Training Launch Script for Qwen3-4B Reward Model + RLOO
+# Simplified approach to avoid distributed training complexities
 
 # ========================================
-# Configuration - Reduced GPU count
+# Configuration
 # ========================================
-export CUDA_VISIBLE_DEVICES=0,1,2,3  # Use only 4 GPUs
+export CUDA_VISIBLE_DEVICES=0
 export OMP_NUM_THREADS=1
-
-# NCCL Configuration - Optimized for container environments
-export NCCL_DEBUG=WARN
-export NCCL_IB_DISABLE=1
-export NCCL_P2P_LEVEL=LOC
-export NCCL_SHM_DISABLE=1  # Disable shared memory to avoid /dev/shm issues
-export NCCL_SOCKET_NTHREADS=1
-export NCCL_NSOCKS_PERTHREAD=1
-
-# Additional NCCL optimizations
-export NCCL_TREE_THRESHOLD=0
-export NCCL_ALGO=Tree
-export NCCL_NET_GDR_LEVEL=0
-export NCCL_NET_GDR_READ=0
 
 # Memory and Performance Optimizations
 export CUDA_LAUNCH_BLOCKING=0
-export TORCH_CUDA_ALLOC_CONF=max_split_size_mb:128,roundup_power2_divisions:16
+export TORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 export TOKENIZERS_PARALLELISM=false
-export CUDA_MODULE_LOADING=LAZY
-export TORCH_CUDNN_V8_API_ENABLED=1
-
-# PyTorch Distributed Settings
-export MASTER_ADDR=localhost
-export MASTER_PORT=29501  # Different port to avoid conflicts
 
 # GPU Memory and Performance
 export CUDA_CACHE_DISABLE=0
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-NUM_GPUS=4  # Reduced from 7 to 4
 REWARD_MODEL_DIR="experiment/models/qwen3_4b_reward_model"
 RLOO_MODEL_DIR="experiment/models/qwen3_4b_rloo_model"
 LOG_DIR="./logs"
@@ -50,11 +29,8 @@ cleanup() {
     echo "Cleaning up..."
     # Kill any remaining processes
     pkill -f "reward_model_training_multi_gpu_fixed.py" 2>/dev/null || true
-    pkill -f "rloo_helpsteer_training.py" 2>/dev/null || true
+    pkill -f "rloo_helpsteer_training_single_gpu.py" 2>/dev/null || true
     pkill -f "tensorboard" 2>/dev/null || true
-    
-    # Clean up NCCL shared memory segments if any exist
-    rm -f /dev/shm/nccl-* 2>/dev/null || true
     
     echo "Cleanup completed."
 }
@@ -62,17 +38,9 @@ cleanup() {
 # Set up signal handlers
 trap cleanup EXIT INT TERM
 
-clear_shm() {
-    echo "Clearing shared memory..."
-    # Clean up any existing NCCL shared memory
-    rm -f /dev/shm/nccl-* 2>/dev/null || true
-    rm -f /dev/shm/sem.* 2>/dev/null || true
-    echo "Shared memory cleared."
-}
-
 show_gpu_status() {
-    echo "GPU Status (Using GPUs 0-3 only):"
-    nvidia-smi -i 0,1,2,3
+    echo "GPU Status (Single GPU):"
+    nvidia-smi -i 0
 }
 
 start_tensorboard() {
@@ -87,25 +55,20 @@ start_tensorboard() {
 }
 
 train_reward_model() {
-    echo "Starting Reward Model Training (4 GPUs)..."
-    clear_shm  # Clear shared memory before training
+    echo "Starting Reward Model Training (Single GPU)..."
     
-    # Adjust batch size for memory constraints - optimized for 4B model with 1024 sequence length
-    local per_device_batch_size=8   # Increased for 4B model (smaller memory footprint)
-    local gradient_accumulation_steps=2  # Reduced since we can use larger batch size
-    local effective_batch_size=$((NUM_GPUS * per_device_batch_size * gradient_accumulation_steps))
-    echo "Effective batch size: $effective_batch_size (4 GPUs × $per_device_batch_size × $gradient_accumulation_steps)"
+    # Optimized batch size for single GPU
+    local per_device_batch_size=6   # Optimized for 48GB memory
+    local gradient_accumulation_steps=4  # Maintain reasonable effective batch size
+    local effective_batch_size=$((per_device_batch_size * gradient_accumulation_steps))
+    echo "Effective batch size: $effective_batch_size (1 GPU × $per_device_batch_size × $gradient_accumulation_steps)"
     
-    torchrun \
-        --standalone \
-        --nproc_per_node=$NUM_GPUS \
-        --max_restarts=0 \
-        experiment/reward_model_training_multi_gpu_fixed.py \
+    python experiment/reward_model_training_multi_gpu_fixed.py \
         --model_name "Qwen/Qwen3-4B" \
         --output_dir "$REWARD_MODEL_DIR" \
         --num_train_epochs 1 \
         --per_device_train_batch_size $per_device_batch_size \
-        --per_device_eval_batch_size 2 \
+        --per_device_eval_batch_size 4 \
         --gradient_accumulation_steps $gradient_accumulation_steps \
         --eval_steps 200 \
         --save_steps 400 \
@@ -119,31 +82,25 @@ train_reward_model() {
         --bf16 \
         --tf32 \
         --report_to "none" \
-        --run_name "qwen3_4b_reward_model_4gpu_$(date +%Y%m%d_%H%M%S)"
+        --run_name "qwen3_4b_reward_model_single_gpu_$(date +%Y%m%d_%H%M%S)"
 }
 
 train_rloo() {
-    echo "Starting Multi-GPU Distributed RLOO Training..."
-    clear_shm  # Clear shared memory before training
+    echo "Starting Single-GPU RLOO Training..."
     
-    # Multi-GPU distributed RLOO training parameters - optimized for 4B model
-    local per_device_batch_size=3    # Adjusted to make total batch size divisible by rloo_k
-    local gradient_accumulation_steps=4   # Reduced since we can use larger batch size
-    local rollout_batch_size=3      # Adjusted for consistency
-    local rloo_k=3                  # Keep at 3 for 4B model
+    # Single-GPU RLOO training parameters
+    local per_device_batch_size=2    # Conservative for stability
+    local gradient_accumulation_steps=8   # Maintain effective batch size
+    local rollout_batch_size=2      # Conservative for memory
+    local rloo_k=2                  # Conservative for stability
     
-    echo "Multi-GPU RLOO Parameters:"
+    echo "Single-GPU RLOO Parameters:"
     echo "  Batch size per device: $per_device_batch_size"
     echo "  Gradient accumulation: $gradient_accumulation_steps"
     echo "  Rollout batch size: $rollout_batch_size"
     echo "  RLOO K: $rloo_k"
-    echo "  Using distributed model loading across GPUs 0-2"
     
-    torchrun \
-        --standalone \
-        --nproc_per_node=$NUM_GPUS \
-        --max_restarts=0 \
-        experiment/rloo_helpsteer_training_multi_gpu_ultimate.py \
+    python experiment/rloo_helpsteer_training_single_gpu.py \
         --reward_model_path "$REWARD_MODEL_DIR" \
         --output_dir "$RLOO_MODEL_DIR" \
         --per_device_train_batch_size $per_device_batch_size \
@@ -151,21 +108,21 @@ train_rloo() {
         --local_rollout_forward_batch_size $rollout_batch_size \
         --rloo_k $rloo_k \
         --learning_rate 1e-6 \
-        --total_episodes 2000 \
+        --total_episodes 1000 \
         --num_ppo_epochs 1 \
         --num_mini_batches 1 \
         --missing_eos_penalty 1.0 \
-        --warmup_steps 20 \
+        --warmup_steps 10 \
         --logging_steps 5 \
-        --save_steps 200 \
-        --eval_steps 100 \
-        --bf16 True \
-        --tf32 True \
+        --save_steps 100 \
+        --eval_steps 50 \
+        --bf16 \
+        --tf32 \
         --gradient_checkpointing \
         --dataloader_num_workers 1 \
         --remove_unused_columns false \
         --report_to "none" \
-        --run_name "qwen3_4b_rloo_multi_gpu_$(date +%Y%m%d_%H%M%S)" \
+        --run_name "qwen3_4b_rloo_single_gpu_$(date +%Y%m%d_%H%M%S)" \
         --trust_remote_code
 }
 
@@ -173,18 +130,14 @@ train_rloo() {
 # Main Execution
 # ========================================
 echo "========================================"
-echo "Multi-GPU Training Setup (Fallback Mode)"
+echo "Single-GPU Training Setup (Stable Mode)"
 echo "========================================"
-echo "GPUs: $CUDA_VISIBLE_DEVICES (4 GPUs only)"
-echo "Number of GPUs: $NUM_GPUS"
+echo "GPU: $CUDA_VISIBLE_DEVICES (Single GPU)"
 echo "Memory per GPU: 48GB"
-echo "Model: Qwen3-4B (reduced from 8B for better performance)"
+echo "Model: Qwen3-4B (simplified for stability)"
 echo "TensorBoard logs: $LOG_DIR"
-echo "Note: Using 4 GPUs instead of 7 to avoid shared memory issues"
+echo "Note: Using single GPU to avoid distributed training issues"
 echo "========================================"
-
-# Initial cleanup
-clear_shm
 
 # Create directories
 mkdir -p "$LOG_DIR"
@@ -211,7 +164,7 @@ case "${1:-both}" in
         train_rloo
         ;;
     "both")
-        echo "Running complete training pipeline (4 GPUs)..."
+        echo "Running complete training pipeline (Single GPU)..."
         start_tensorboard
         
         # Train reward model first
@@ -233,9 +186,8 @@ case "${1:-both}" in
         echo "  rloo   - Train only the RLOO model (requires existing reward model)"
         echo "  both   - Train both models sequentially (default)"
         echo ""
-        echo "This is the fallback script using 4 GPUs instead of 7"
-        echo "to work around shared memory limitations."
-        echo "Using Qwen3-4B model for better performance and memory efficiency."
+        echo "This is the stable script using single GPU"
+        echo "to avoid distributed training complexities."
         exit 1
         ;;
 esac

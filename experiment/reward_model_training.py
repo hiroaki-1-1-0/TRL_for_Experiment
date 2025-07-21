@@ -25,7 +25,7 @@ The script converts HelpSteer3 preference data into the format expected by Rewar
 
 Usage:
 python reward_model_training.py \
-    --output_dir models/qwen3_8b_reward_model \
+    --output_dir experiment/models/qwen3_8b_reward_model \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
     --learning_rate 1e-5 \
@@ -199,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser(description="Train Qwen/Qwen3-8B as reward model")
     
     # Model and training arguments
-    parser.add_argument("--output_dir", type=str, default="models/qwen3_8b_reward_model",
+    parser.add_argument("--output_dir", type=str, default="experiment/models/qwen3_8b_reward_model",
                         help="Output directory for trained model")
     parser.add_argument("--per_device_train_batch_size", type=int, default=4,
                         help="Batch size per device during training")

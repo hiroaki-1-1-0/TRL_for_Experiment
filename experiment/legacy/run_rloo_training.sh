@@ -16,7 +16,7 @@ if [ ! -f "rloo_helpsteer_training.py" ]; then
 fi
 
 # Set default values
-OUTPUT_DIR="models/rloo_helpsteer3"
+OUTPUT_DIR="experiment/models/rloo_helpsteer3"
 BATCH_SIZE=2
 GRAD_ACCUM=8
 LEARNING_RATE=1e-6
@@ -65,7 +65,7 @@ if [ "$1" == "single" ] || [ "$#" -eq 0 ]; then
         --logging_steps 10 \
         --save_steps 1000 \
         --eval_steps 500 \
-        --bf16 true \
+        --bf16=true \
         --gradient_checkpointing \
         --dataloader_num_workers 4 \
         --remove_unused_columns false \

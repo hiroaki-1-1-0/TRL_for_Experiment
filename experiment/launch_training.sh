@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Multi-GPU Training Launch Script for Qwen3-8B Reward Model + RLOO
+# Multi-GPU Training Launch Script for Qwen3-4B Reward Model + RLOO
 # Optimized for 7x 48GB NVIDIA RTX 6000 Ada GPUs
 
 # ========================================
@@ -31,8 +31,8 @@ export CUDA_CACHE_DISABLE=0
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 NUM_GPUS=7
-REWARD_MODEL_DIR="models/qwen3_8b_reward_model"
-RLOO_MODEL_DIR="models/qwen3_8b_rloo_model"
+REWARD_MODEL_DIR="models/qwen3_4b_reward_model"
+RLOO_MODEL_DIR="models/qwen3_4b_rloo_model"
 LOG_DIR="./logs"
 
 # ========================================
@@ -82,23 +82,23 @@ train_reward_model() {
     echo "Starting Reward Model Training..."
     clear_shm  # Clear shared memory before training
     
-    # Calculate effective batch size
-    local per_device_batch_size=8
-    local gradient_accumulation_steps=2
+    # Calculate effective batch size - optimized for 4B model
+    local per_device_batch_size=12  # Increased for 4B model (smaller memory footprint)
+    local gradient_accumulation_steps=1  # Reduced since we can use larger batch size
     local effective_batch_size=$((NUM_GPUS * per_device_batch_size * gradient_accumulation_steps))
-    echo "Effective batch size: $effective_batch_size"
+    echo "Effective batch size: $effective_batch_size (7 GPUs × $per_device_batch_size × $gradient_accumulation_steps)"
     
     torchrun \
         --standalone \
         --nproc_per_node=$NUM_GPUS \
         --max_restarts=0 \
         reward_model_training_multi_gpu_fixed.py \
-        --model_name "Qwen/Qwen3-8B" \
+        --model_name "Qwen/Qwen3-4B" \
         --dataset_name "nvidia/HelpSteer3" \
         --output_dir "$REWARD_MODEL_DIR" \
         --num_train_epochs 1 \
         --per_device_train_batch_size $per_device_batch_size \
-        --per_device_eval_batch_size 4 \
+        --per_device_eval_batch_size 6 \
         --gradient_accumulation_steps $gradient_accumulation_steps \
         --eval_strategy "steps" \
         --eval_steps 200 \
@@ -118,7 +118,7 @@ train_reward_model() {
         --dataloader_num_workers 4 \
         --remove_unused_columns false \
         --report_to "tensorboard" \
-        --run_name "qwen3_8b_reward_model_$(date +%Y%m%d_%H%M%S)" \
+        --run_name "qwen3_4b_reward_model_$(date +%Y%m%d_%H%M%S)" \
         --ddp_timeout 7200 \
         --dataloader_pin_memory false
 }
@@ -130,10 +130,12 @@ train_rloo() {
     python rloo_helpsteer_training.py \
         --reward_model_path "$REWARD_MODEL_DIR" \
         --output_dir "$RLOO_MODEL_DIR" \
-        --bf16 \
-        --tf32 \
-        --report_to "tensorboard" \
-        --run_name "qwen3_8b_rloo_$(date +%Y%m%d_%H%M%S)"
+        --per_device_train_batch_size 4 \
+        --rloo_k 4 \
+        --bf16 True \
+        --tf32 True \
+        --report_to "none" \
+        --run_name "qwen3_4b_rloo_$(date +%Y%m%d_%H%M%S)"
 }
 
 # ========================================
@@ -145,6 +147,7 @@ echo "========================================"
 echo "GPUs: $CUDA_VISIBLE_DEVICES"
 echo "Number of GPUs: $NUM_GPUS"
 echo "Memory per GPU: 48GB"
+echo "Model: Qwen3-4B (optimized for 7 GPUs)"
 echo "TensorBoard logs: $LOG_DIR"
 echo "========================================"
 

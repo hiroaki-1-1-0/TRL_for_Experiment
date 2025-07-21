@@ -143,3 +143,6 @@ checklink/cookies.txt
 nbs/wandb/
 examples/notebooks/wandb/
 wandb/
+
+# Ignore all contents of experiment/models/
+experiment/models/

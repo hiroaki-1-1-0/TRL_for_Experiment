@@ -178,8 +178,8 @@ def prepare_dataset() -> Dataset:
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-8B")
-    parser.add_argument("--output_dir", type=str, default="models/qwen3_8b_reward_model")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-4B")
+    parser.add_argument("--output_dir", type=str, default="experiment/models/qwen3_4b_reward_model")
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument("--per_device_train_batch_size", type=int, default=4)  # Reduced from 12
     parser.add_argument("--per_device_eval_batch_size", type=int, default=2)   # Reduced from 6
@@ -288,7 +288,7 @@ def main():
         dataloader_pin_memory=False,
         remove_unused_columns=False,
         report_to=args.report_to,
-        run_name=args.run_name or f"qwen3_8b_reward_model_{rank}",
+        run_name=args.run_name or f"qwen3_4b_reward_model_{rank}",
         max_length=args.max_length,
         # Memory optimization settings
         gradient_checkpointing=True,

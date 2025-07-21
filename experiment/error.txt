@@ -1,0 +1,482 @@
+root@5c692851e34a:/TRL_for_Experiment# ./experiment/launch_training_fallback.sh rloo
+========================================
+Multi-GPU Training Setup (Fallback Mode)
+========================================
+GPUs: 0,1,2,3 (4 GPUs only)
+Number of GPUs: 4
+Memory per GPU: 48GB
+Model: Qwen3-4B (reduced from 8B for better performance)
+TensorBoard logs: ./logs
+Note: Using 4 GPUs instead of 7 to avoid shared memory issues
+========================================
+Clearing shared memory...
+Shared memory cleared.
+GPU Status (Using GPUs 0-3 only):
+Sat Jul 19 14:02:57 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.133.20             Driver Version: 570.133.20     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA RTX 6000 Ada Gene...    On  |   00000000:24:00.0 Off |                  Off |
+| 30%   26C    P8             22W /  250W |       2MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA RTX 6000 Ada Gene...    On  |   00000000:45:00.0 Off |                  Off |
+| 30%   29C    P8             23W /  250W |       2MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA RTX 6000 Ada Gene...    On  |   00000000:46:00.0 Off |                  Off |
+| 30%   31C    P8             23W /  250W |       2MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA RTX 6000 Ada Gene...    On  |   00000000:47:00.0 Off |                  Off |
+| 30%   30C    P8             20W /  250W |       2MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+========================================
+Starting TensorBoard...
+TensorBoard not available, skipping...
+Starting Multi-GPU Distributed RLOO Training...
+Clearing shared memory...
+Shared memory cleared.
+Multi-GPU RLOO Parameters:
+  Batch size per device: 3
+  Gradient accumulation: 4
+  Rollout batch size: 3
+  RLOO K: 3
+  Using distributed model loading across GPUs 0-2
+🚀 ULTIMATE Multi-GPU RLOO Training
+🔥 Complete TRL data flow override for device mismatch resolution
+================================================================================
+🚀 ULTIMATE Multi-GPU RLOO Training
+🔥 Complete TRL data flow override for device mismatch resolution
+================================================================================
+🚀 ULTIMATE Multi-GPU RLOO Training
+🔥 Complete TRL data flow override for device mismatch resolution
+================================================================================
+📋 ULTIMATE Training Configuration:
+  Policy Model: Qwen/Qwen3-4B
+  Reward Model: experiment/models/qwen3_4b_reward_model
+  Dataset: nvidia/HelpSteer3 (English only)
+  Output Directory: experiment/models/qwen3_4b_rloo_model
+  Available GPUs: 4
+================================================================================
+🚀 ULTIMATE Multi-GPU RLOO Training
+🔥 Complete TRL data flow override for device mismatch resolution
+================================================================================
+Using trained reward model from: experiment/models/qwen3_4b_reward_model
+Loading tokenizer from Qwen/Qwen3-4B
+📋 ULTIMATE Training Configuration:
+  Policy Model: Qwen/Qwen3-4B
+  Reward Model: experiment/models/qwen3_4b_reward_model
+  Dataset: nvidia/HelpSteer3 (English only)
+  Output Directory: experiment/models/qwen3_4b_rloo_model
+  Available GPUs: 4
+================================================================================
+Using trained reward model from: experiment/models/qwen3_4b_reward_model
+Loading tokenizer from Qwen/Qwen3-4B
+📋 ULTIMATE Training Configuration:
+  Policy Model: Qwen/Qwen3-4B
+  Reward Model: experiment/models/qwen3_4b_reward_model
+  Dataset: nvidia/HelpSteer3 (English only)
+  Output Directory: experiment/models/qwen3_4b_rloo_model
+  Available GPUs: 4
+================================================================================
+📋 ULTIMATE Training Configuration:
+  Policy Model: Qwen/Qwen3-4B
+  Reward Model: experiment/models/qwen3_4b_reward_model
+  Dataset: nvidia/HelpSteer3 (English only)
+  Output Directory: experiment/models/qwen3_4b_rloo_model
+  Available GPUs: 4
+================================================================================
+Using trained reward model from: experiment/models/qwen3_4b_reward_model
+Loading tokenizer from Qwen/Qwen3-4B
+Using trained reward model from: experiment/models/qwen3_4b_reward_model
+Loading tokenizer from Qwen/Qwen3-4B
+🔧 ULTIMATE Multi-GPU distribution strategy
+Available GPUs: 4
+🎯 ULTIMATE device mapping:
+  Reward model: cuda:0
+  Reference policy: cuda:1
+  Policy model: cuda:2
+🔄 Loading reward model from experiment/models/qwen3_4b_reward_model
+🔧 ULTIMATE Multi-GPU distribution strategy
+Available GPUs: 4
+🎯 ULTIMATE device mapping:
+  Reward model: cuda:0
+  Reference policy: cuda:1
+  Policy model: cuda:2
+🔄 Loading reward model from experiment/models/qwen3_4b_reward_model
+Loading checkpoint shards:   0%|                                                                                        | 0/3 [00:00<?, ?it/s]🔧 ULTIMATE Multi-GPU distribution strategy
+Available GPUs: 4
+🎯 ULTIMATE device mapping:
+  Reward model: cuda:0
+  Reference policy: cuda:1
+  Policy model: cuda:2
+🔄 Loading reward model from experiment/models/qwen3_4b_reward_model
+🔧 ULTIMATE Multi-GPU distribution strategy
+Available GPUs: 4
+🎯 ULTIMATE device mapping:
+  Reward model: cuda:0
+  Reference policy: cuda:1
+  Policy model: cuda:2
+🔄 Loading reward model from experiment/models/qwen3_4b_reward_model
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  1.67it/s]
+Some weights of Qwen3ForSequenceClassification were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['score.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  1.81it/s]
+Some weights of Qwen3ForSequenceClassification were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['score.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  1.85it/s]
+Some weights of Qwen3ForSequenceClassification were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['score.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.05it/s]
+Some weights of Qwen3ForSequenceClassification were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['score.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+🔄 Loading reference policy from Qwen/Qwen3-4B
+🔄 Loading reference policy from Qwen/Qwen3-4B
+Loading checkpoint shards:   0%|                                                                                        | 0/3 [00:00<?, ?it/s]🔄 Loading reference policy from Qwen/Qwen3-4B
+🔄 Loading reference policy from Qwen/Qwen3-4B
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.02it/s]
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.01it/s]
+🔄 Loading policy model from Qwen/Qwen3-4B
+🔄 Loading policy model from Qwen/Qwen3-4B
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.08it/s]
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  1.70it/s]
+🔄 Loading policy model from Qwen/Qwen3-4B
+Loading checkpoint shards:  33%|██████████████████████████▋                                                     | 1/3 [00:00<00:01,  1.43it/s]🔄 Loading policy model from Qwen/Qwen3-4B
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.05it/s]
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.07it/s]
+📊 Loading HelpSteer3 dataset...
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.23it/s]
+Loading checkpoint shards:  33%|██████████████████████████▋                                                     | 1/3 [00:00<00:01,  1.11it/s]📊 Loading HelpSteer3 dataset...
+📊 Loading HelpSteer3 dataset...
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  1.67it/s]
+📊 Loading HelpSteer3 dataset...
+Filtering for English language samples...
+Processed 0 samples, found 0 English samples
+Filtering for English language samples...
+Processed 0 samples, found 0 English samples
+Processed 1000 samples, found 0 English samples
+Processed 2000 samples, found 0 English samples
+Processed 1000 samples, found 0 English samples
+Processed 3000 samples, found 0 English samples
+Processed 2000 samples, found 0 English samples
+Processed 4000 samples, found 0 English samples
+Processed 3000 samples, found 0 English samples
+Filtering for English language samples...
+Processed 0 samples, found 0 English samples
+Processed 5000 samples, found 0 English samples
+Processed 4000 samples, found 0 English samples
+Processed 6000 samples, found 0 English samples
+Processed 1000 samples, found 0 English samples
+Processed 5000 samples, found 0 English samples
+Processed 7000 samples, found 0 English samples
+Processed 2000 samples, found 0 English samples
+Processed 6000 samples, found 0 English samples
+Processed 8000 samples, found 0 English samples
+Processed 3000 samples, found 0 English samples
+Processed 7000 samples, found 0 English samples
+Processed 4000 samples, found 0 English samples
+Processed 9000 samples, found 582 English samples
+Processed 8000 samples, found 0 English samples
+Processed 5000 samples, found 0 English samples
+Processed 10000 samples, found 1582 English samples
+Processed 9000 samples, found 582 English samples
+Processed 6000 samples, found 0 English samples
+Processed 11000 samples, found 2582 English samples
+Processed 10000 samples, found 1582 English samples
+Processed 7000 samples, found 0 English samples
+Processed 12000 samples, found 3582 English samples
+Processed 8000 samples, found 0 English samples
+Processed 11000 samples, found 2582 English samples
+Processed 13000 samples, found 4582 English samples
+Processed 9000 samples, found 582 English samples
+Processed 12000 samples, found 3582 English samples
+Filtering for English language samples...
+Processed 0 samples, found 0 English samples
+Processed 14000 samples, found 5582 English samples
+Processed 10000 samples, found 1582 English samples
+Processed 13000 samples, found 4582 English samples
+Processed 1000 samples, found 0 English samples
+Processed 15000 samples, found 6582 English samples
+Processed 11000 samples, found 2582 English samples
+Processed 14000 samples, found 5582 English samples
+Processed 2000 samples, found 0 English samples
+Processed 16000 samples, found 7582 English samples
+Processed 12000 samples, found 3582 English samples
+Processed 15000 samples, found 6582 English samples
+Processed 3000 samples, found 0 English samples
+Processed 13000 samples, found 4582 English samples
+Processed 17000 samples, found 8582 English samples
+Processed 16000 samples, found 7582 English samples
+Processed 4000 samples, found 0 English samples
+Processed 14000 samples, found 5582 English samples
+Processed 18000 samples, found 9582 English samples
+Processed 5000 samples, found 0 English samples
+Processed 17000 samples, found 8582 English samples
+Processed 15000 samples, found 6582 English samples
+Processed 19000 samples, found 10582 English samples
+Processed 6000 samples, found 0 English samples
+Processed 18000 samples, found 9582 English samples
+Processed 16000 samples, found 7582 English samples
+Processed 20000 samples, found 11582 English samples
+Processed 7000 samples, found 0 English samples
+Processed 19000 samples, found 10582 English samples
+Processed 17000 samples, found 8582 English samples
+Processed 8000 samples, found 0 English samples
+Processed 21000 samples, found 12582 English samples
+Processed 20000 samples, found 11582 English samples
+Processed 18000 samples, found 9582 English samples
+Processed 9000 samples, found 582 English samples
+Processed 22000 samples, found 13582 English samples
+Processed 21000 samples, found 12582 English samples
+Processed 19000 samples, found 10582 English samples
+Processed 10000 samples, found 1582 English samples
+Processed 23000 samples, found 14582 English samples
+Processed 22000 samples, found 13582 English samples
+Processed 20000 samples, found 11582 English samples
+Processed 11000 samples, found 2582 English samples
+Processed 24000 samples, found 15582 English samples
+Processed 23000 samples, found 14582 English samples
+Processed 21000 samples, found 12582 English samples
+Processed 12000 samples, found 3582 English samples
+Processed 25000 samples, found 16582 English samples
+Processed 22000 samples, found 13582 English samples
+Processed 13000 samples, found 4582 English samples
+Processed 24000 samples, found 15582 English samples
+Processed 26000 samples, found 17582 English samples
+Processed 23000 samples, found 14582 English samples
+Processed 14000 samples, found 5582 English samples
+Processed 25000 samples, found 16582 English samples
+Processed 27000 samples, found 18582 English samples
+Processed 15000 samples, found 6582 English samples
+Processed 24000 samples, found 15582 English samples
+Processed 26000 samples, found 17582 English samples
+Processed 28000 samples, found 19582 English samples
+Processed 16000 samples, found 7582 English samples
+Processed 25000 samples, found 16582 English samples
+Processed 27000 samples, found 18582 English samples
+Processed 29000 samples, found 20582 English samples
+Processed 17000 samples, found 8582 English samples
+Processed 26000 samples, found 17582 English samples
+Processed 28000 samples, found 19582 English samples
+Processed 18000 samples, found 9582 English samples
+Processed 30000 samples, found 21582 English samples
+Processed 27000 samples, found 18582 English samples
+Processed 29000 samples, found 20582 English samples
+Processed 19000 samples, found 10582 English samples
+Processed 31000 samples, found 22380 English samples
+Processed 28000 samples, found 19582 English samples
+Processed 30000 samples, found 21582 English samples
+Processed 20000 samples, found 11582 English samples
+Processed 32000 samples, found 22380 English samples
+Processed 29000 samples, found 20582 English samples
+Processed 33000 samples, found 22380 English samples
+Processed 31000 samples, found 22380 English samples
+Processed 21000 samples, found 12582 English samples
+Processed 30000 samples, found 21582 English samples
+Processed 34000 samples, found 22380 English samples
+Processed 32000 samples, found 22380 English samples
+Processed 22000 samples, found 13582 English samples
+Processed 35000 samples, found 22380 English samples
+Processed 31000 samples, found 22380 English samples
+Processed 33000 samples, found 22380 English samples
+Processed 36000 samples, found 22380 English samples
+Processed 23000 samples, found 14582 English samples
+Processed 34000 samples, found 22380 English samples
+Processed 32000 samples, found 22380 English samples
+Processed 37000 samples, found 22380 English samples
+Processed 35000 samples, found 22380 English samples
+Processed 24000 samples, found 15582 English samples
+Processed 38000 samples, found 22380 English samples
+Processed 33000 samples, found 22380 English samples
+Original dataset size: 38459
+After English filtering: 22380 samples
+Filtered out: 16079 non-English samples
+Processed 36000 samples, found 22380 English samples
+Processed 25000 samples, found 16582 English samples
+Processed 37000 samples, found 22380 English samples
+Processed 34000 samples, found 22380 English samples
+Processed 38000 samples, found 22380 English samples
+Processed 26000 samples, found 17582 English samples
+Processed 35000 samples, found 22380 English samples
+Original dataset size: 38459
+After English filtering: 22380 samples
+Filtered out: 16079 non-English samples
+Processed 36000 samples, found 22380 English samples
+Processed 27000 samples, found 18582 English samples
+Processed 37000 samples, found 22380 English samples
+Processed 28000 samples, found 19582 English samples
+Processed 38000 samples, found 22380 English samples
+Original dataset size: 38459
+After English filtering: 22380 samples
+Filtered out: 16079 non-English samples
+Processed 29000 samples, found 20582 English samples
+Processed 30000 samples, found 21582 English samples
+Processed 31000 samples, found 22380 English samples
+Processed 32000 samples, found 22380 English samples
+Processed 33000 samples, found 22380 English samples
+Processed 34000 samples, found 22380 English samples
+Processed 35000 samples, found 22380 English samples
+Processed 36000 samples, found 22380 English samples
+Processed 37000 samples, found 22380 English samples
+📈 Train samples: 22280
+📊 Eval samples: 100
+🔤 Tokenizing datasets...
+Tokenizing samples...
+Tokenized 0/200 samples
+Processed 38000 samples, found 22380 English samples
+Tokenized 100/200 samples
+Successfully tokenized 200 samples
+Tokenizing samples...
+Tokenized 0/50 samples
+Original dataset size: 38459
+After English filtering: 22380 samples
+Filtered out: 16079 non-English samples
+Successfully tokenized 50 samples
+✅ Final train dataset size: 200
+✅ Final eval dataset size: 50
+🎯 Initializing ULTIMATE RLOO trainer...
+🚀 UltimateRLOOTrainer - Complete TRL override:
+  Reward model device: cuda:0
+  Reference policy device: cuda:1
+  Policy model device: cuda:2
+📈 Train samples: 22280
+📊 Eval samples: 100
+🔤 Tokenizing datasets...
+Tokenizing samples...
+Tokenized 0/200 samples
+Tokenized 100/200 samples
+Successfully tokenized 200 samples
+Tokenizing samples...
+Tokenized 0/50 samples
+Successfully tokenized 50 samples
+✅ Final train dataset size: 200
+✅ Final eval dataset size: 50
+🎯 Initializing ULTIMATE RLOO trainer...
+🚀 UltimateRLOOTrainer - Complete TRL override:
+  Reward model device: cuda:0
+  Reference policy device: cuda:1
+  Policy model device: cuda:2
+📈 Train samples: 22280
+📊 Eval samples: 100
+🔤 Tokenizing datasets...
+Tokenizing samples...
+Tokenized 0/200 samples
+Tokenized 100/200 samples
+Successfully tokenized 200 samples
+Tokenizing samples...
+Tokenized 0/50 samples
+Successfully tokenized 50 samples
+✅ Final train dataset size: 200
+✅ Final eval dataset size: 50
+🎯 Initializing ULTIMATE RLOO trainer...
+🚀 UltimateRLOOTrainer - Complete TRL override:
+  Reward model device: cuda:0
+  Reference policy device: cuda:1
+  Policy model device: cuda:2
+NCCL version 2.20.5+cuda12.4
+📈 Train samples: 22280
+📊 Eval samples: 100
+🔤 Tokenizing datasets...
+Tokenizing samples...
+Tokenized 0/200 samples
+Tokenized 100/200 samples
+Successfully tokenized 200 samples
+Tokenizing samples...
+Tokenized 0/50 samples
+Successfully tokenized 50 samples
+✅ Final train dataset size: 200
+✅ Final eval dataset size: 50
+🎯 Initializing ULTIMATE RLOO trainer...
+🚀 UltimateRLOOTrainer - Complete TRL override:
+  Reward model device: cuda:0
+  Reference policy device: cuda:1
+  Policy model device: cuda:2
+[rank2]:[E719 14:33:43.572774248 ProcessGroupNCCL.cpp:607] [Rank 2] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=2, OpType=ALLGATHER, NumelIn=1, NumelOut=4, Timeout(ms)=1800000) ran for 1800014 milliseconds before timing out.
+[rank2]:[E719 14:33:43.573118795 ProcessGroupNCCL.cpp:1664] [PG 0 (default_pg) Rank 2] Exception (either an error or timeout) detected by watchdog at work: 2, last enqueued NCCL work: 2, last completed NCCL work: 1.
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/TRL_for_Experiment/experiment/rloo_helpsteer_training_multi_gpu_ultimate.py", line 525, in <module>
+[rank2]:     main() 
+[rank2]:   File "/TRL_for_Experiment/experiment/rloo_helpsteer_training_multi_gpu_ultimate.py", line 501, in main
+[rank2]:     trainer = UltimateRLOOTrainer(
+[rank2]:   File "/TRL_for_Experiment/experiment/rloo_helpsteer_training_multi_gpu_ultimate.py", line 270, in __init__
+[rank2]:     super().__init__(**kwargs)
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/trl/trainer/rloo_trainer.py", line 213, in __init__
+[rank2]:     self.model, self.optimizer, self.dataloader = accelerator.prepare(self.model, self.optimizer, self.dataloader)
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/accelerate/accelerator.py", line 1453, in prepare
+[rank2]:     result = tuple(
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/accelerate/accelerator.py", line 1454, in <genexpr>
+[rank2]:     self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/accelerate/accelerator.py", line 1302, in _prepare_one
+[rank2]:     return self.prepare_model(obj, device_placement=device_placement)
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/accelerate/accelerator.py", line 1669, in prepare_model
+[rank2]:     model = torch.nn.parallel.DistributedDataParallel(
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/nn/parallel/distributed.py", line 822, in __init__
+[rank2]:     _verify_param_shape_across_processes(self.process_group, parameters)
+[rank2]:   File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/utils.py", line 286, in _verify_param_shape_across_processes
+[rank2]:     return dist._verify_params_across_processes(process_group, tensors, logger)
+[rank2]: RuntimeError: DDP expects same model across all ranks, but Rank 2 has 398 params, while rank 0 has inconsistent 0 params.
+[rank2]:[E719 14:33:43.038123814 ProcessGroupNCCL.cpp:1709] [PG 0 (default_pg) Rank 2] Timeout at NCCL work: 2, last enqueued NCCL work: 2, last completed NCCL work: 1.
+[rank2]:[E719 14:33:43.038162533 ProcessGroupNCCL.cpp:621] [Rank 2] Some NCCL operations have failed or timed out. Due to the asynchronous nature of CUDA kernels, subsequent GPU operations might run on corrupted/incomplete data.
+[rank2]:[E719 14:33:43.038173082 ProcessGroupNCCL.cpp:627] [Rank 2] To avoid data inconsistency, we are taking the entire process down.
+[rank2]:[E719 14:33:43.040756344 ProcessGroupNCCL.cpp:1515] [PG 0 (default_pg) Rank 2] Process group watchdog thread terminated with exception: [Rank 2] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=2, OpType=ALLGATHER, NumelIn=1, NumelOut=4, Timeout(ms)=1800000) ran for 1800014 milliseconds before timing out.
+Exception raised from checkTimeout at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:609 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x7f6320f77f86 in /opt/conda/envs/trl/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x1d2 (0x7f62d2f708d2 in /opt/conda/envs/trl/lib/python3.10/site-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x233 (0x7f62d2f77313 in /opt/conda/envs/trl/lib/python3.10/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x10c (0x7f62d2f796fc in /opt/conda/envs/trl/lib/python3.10/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xdbbf4 (0x7f63206c7bf4 in /opt/conda/envs/trl/bin/../lib/libstdc++.so.6)
+frame #5: <unknown function> + 0x94ac3 (0x7f6321cb2ac3 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #6: clone + 0x44 (0x7f6321d43bf4 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
+W0719 14:33:43.996000 140216076740416 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 133279 closing signal SIGTERM
+W0719 14:33:43.997000 140216076740416 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 133280 closing signal SIGTERM
+W0719 14:33:43.997000 140216076740416 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 133282 closing signal SIGTERM
+E0719 14:33:44.764000 140216076740416 torch/distributed/elastic/multiprocessing/api.py:833] failed (exitcode: -6) local_rank: 2 (pid: 133281) of binary: /opt/conda/envs/trl/bin/python3.10
+Traceback (most recent call last):
+  File "/opt/conda/envs/trl/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 348, in wrapper
+    return f(*args, **kwargs)
+  File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/run.py", line 901, in main
+    run(args)
+  File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/run.py", line 892, in run
+    elastic_launch(
+  File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 133, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/opt/conda/envs/trl/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 264, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+experiment/rloo_helpsteer_training_multi_gpu_ultimate.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-07-19_14:33:43
+  host      : 5c692851e34a
+  rank      : 2 (local_rank: 2)
+  exitcode  : -6 (pid: 133281)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 133281
+============================================================
+========================================
+Training completed!
+========================================
+Cleaning up...
+Cleanup completed.
