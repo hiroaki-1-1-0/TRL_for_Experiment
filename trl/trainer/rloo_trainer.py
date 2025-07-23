@@ -66,12 +66,36 @@ from .utils import empty_cache, generate_model_card, get_comet_experiment_url, l
 
 if is_wandb_available():
     import wandb
+import pandas as pd
+import math
+import time
+import gc
+import torch
+import torch.nn as nn
 
 INVALID_LOGPROB = 1.0
 
 
 class RLOOTrainer(Trainer):
     _tag_names = ["trl", "rloo"]
+
+    def _get_model_device(self, model):
+        """
+        Get the device of a model safely, handling wrapped models
+        """
+        try:
+            # Handle different types of wrapped models
+            if hasattr(model, 'module'):  # DistributedDataParallel or similar
+                return next(model.module.parameters()).device
+            elif hasattr(model, '_modules') and len(model._modules) > 0:  # Regular module
+                return next(model.parameters()).device
+            else:  # Fallback for special cases
+                return next(model.parameters()).device
+        except (StopIteration, AttributeError):
+            # Fallback to accelerator device if model has no parameters or other issues
+            if hasattr(self, 'accelerator') and hasattr(self.accelerator, 'device'):
+                return self.accelerator.device
+            return torch.device('cuda:0')  # final fallback
 
     def __init__(
         self,
@@ -99,6 +123,14 @@ class RLOOTrainer(Trainer):
         args = config
         self.processing_class = processing_class
         self.policy = policy
+
+        # Multi-GPU device mapping setup - auto-detect from models
+        self.policy_device = self._get_model_device(policy)
+        self.ref_policy_device = self._get_model_device(ref_policy) 
+        if isinstance(reward_model, nn.Module):
+            self.reward_model_device = self._get_model_device(reward_model)
+        else:
+            self.reward_model_device = self.policy_device
 
         # Define the collator if not provided
         if data_collator is None:
@@ -212,6 +244,9 @@ class RLOOTrainer(Trainer):
         torch.manual_seed(args.seed)
         self.model, self.optimizer, self.dataloader = accelerator.prepare(self.model, self.optimizer, self.dataloader)
         torch.manual_seed(self.local_seed)  # reset the local seed again
+        
+        # Update policy device info after accelerator.prepare
+        self.policy_device = self._get_model_device(self.model)
 
         self.eval_dataloader = DataLoader(
             self.eval_dataset,
@@ -226,14 +261,55 @@ class RLOOTrainer(Trainer):
                 self.reward_model = prepare_deepspeed(
                     self.reward_model, args.per_device_train_batch_size, args.fp16, args.bf16
                 )
+                # Update device info after DeepSpeed wrapping
+                self.reward_model_device = self._get_model_device(self.reward_model)
             self.ref_policy = prepare_deepspeed(
                 self.ref_policy, args.per_device_train_batch_size, args.fp16, args.bf16
             )
+            # Update device info after DeepSpeed wrapping
+            self.ref_policy_device = self._get_model_device(self.ref_policy)
             self.deepspeed = self.model
+
+    def _move_tensors_to_device(self, tensors, target_device):
+        """
+        Safely move tensors to target device, handling various tensor types
+        """
+        if tensors is None:
+            return tensors
+        
+        if torch.is_tensor(tensors):
+            return tensors.to(target_device, non_blocking=True)
+        elif isinstance(tensors, dict):
+            return {k: self._move_tensors_to_device(v, target_device) for k, v in tensors.items()}
+        elif isinstance(tensors, (list, tuple)):
+            return type(tensors)(self._move_tensors_to_device(item, target_device) for item in tensors)
         else:
-            self.ref_policy = self.ref_policy.to(self.accelerator.device)
-            if isinstance(self.reward_model, nn.Module):
-                self.reward_model = self.reward_model.to(self.accelerator.device)
+            return tensors
+
+    def _safe_forward_on_device(self, model, input_data, target_device, pad_token_id):
+        """
+        Safely perform forward pass on specific device
+        """
+        # Ensure model is on correct device first
+        if isinstance(model, nn.Module):
+            model_device = self._get_model_device(model)
+            target_device = model_device  # Always use model's device
+        
+        # Move input data to model's device
+        input_data_on_device = self._move_tensors_to_device(input_data, target_device)
+        
+        # Perform forward pass
+        with torch.cuda.device(target_device):
+            if torch.is_tensor(input_data_on_device):
+                attention_mask = (input_data_on_device != pad_token_id).long().to(target_device)
+                output = model(input_ids=input_data_on_device, attention_mask=attention_mask)
+            else:
+                # Ensure all components of input_data are on the same device
+                input_data_on_device = {k: v.to(target_device) if torch.is_tensor(v) else v 
+                                      for k, v in input_data_on_device.items()}
+                output = model(**input_data_on_device)
+        
+        return output
 
     def get_train_dataloader(self) -> DataLoader:
         return self.dataloader
@@ -336,10 +412,20 @@ class RLOOTrainer(Trainer):
                     del logits
                     empty_cache()
 
-                    ref_output = forward(ref_policy, query_response, processing_class.pad_token_id)
+                    # Reference policy forward pass with device management
+                    ref_policy_device = self._get_model_device(ref_policy)
+                    query_response_for_ref = self._move_tensors_to_device(query_response, ref_policy_device)
+                    
+                    ref_output = self._safe_forward_on_device(
+                        ref_policy, query_response_for_ref, ref_policy_device, processing_class.pad_token_id
+                    )
                     ref_logits = ref_output.logits[:, context_length - 1 : -1]
                     ref_logits /= args.temperature + 1e-7
-                    ref_logprob = selective_log_softmax(ref_logits, response)
+                    ref_logprob = selective_log_softmax(ref_logits, response.to(ref_logits.device))
+                    
+                    # Move results back to main device if needed
+                    ref_logprob = ref_logprob.to(device)
+                    
                     del ref_output, ref_logits
                     empty_cache()
 
@@ -350,14 +436,23 @@ class RLOOTrainer(Trainer):
                             args.stop_token_id, processing_class.pad_token_id, response
                         )
 
-                    # Response Processing 2. run reward model on the truncated responses
+                    # Response Processing 2. run reward model on the truncated responses with device management
                     postprocessed_query_response = torch.cat((query, postprocessed_response), 1)
                     sequence_length = first_true_indices(postprocessed_response == processing_class.pad_token_id) - 1
 
                     if isinstance(reward_model, nn.Module):
-                        _, score, _ = get_reward(
-                            reward_model, postprocessed_query_response, processing_class.pad_token_id, context_length
+                        reward_model_device = self._get_model_device(reward_model)
+                        postprocessed_query_response_for_reward = self._move_tensors_to_device(
+                            postprocessed_query_response, reward_model_device
                         )
+                        
+                        _, score, _ = get_reward(
+                            reward_model, postprocessed_query_response_for_reward, 
+                            processing_class.pad_token_id, context_length
+                        )
+                        
+                        # Move score back to main device
+                        score = score.to(device)
                     else:
                         score = torch.tensor(
                             reward_model(
@@ -366,13 +461,13 @@ class RLOOTrainer(Trainer):
                             dtype=torch.float,
                         ).to(device)
 
-                    # Store batch results
-                    responses.append(response)
-                    postprocessed_responses.append(postprocessed_response)
-                    logprobs.append(logprob)
-                    ref_logprobs.append(ref_logprob)
-                    sequence_lengths.append(sequence_length)
-                    scores.append(score)
+                    # Store batch results (ensure all tensors are on main device)
+                    responses.append(response.to(device))
+                    postprocessed_responses.append(postprocessed_response.to(device))
+                    logprobs.append(logprob.to(device))
+                    ref_logprobs.append(ref_logprob.to(device))
+                    sequence_lengths.append(sequence_length.to(device))
+                    scores.append(score.to(device))
 
                 # Concatenate all batched results
                 responses = torch.cat(responses, 0)
@@ -455,22 +550,35 @@ class RLOOTrainer(Trainer):
                             micro_batch_end = micro_batch_start + args.per_device_train_batch_size
                             micro_batch_inds = mini_batch_inds[micro_batch_start:micro_batch_end]
 
-                            # Get batch data
-                            mb_advantage = advantages[micro_batch_inds]
-                            mb_responses = responses[micro_batch_inds]
-                            mb_query_responses = query_responses[micro_batch_inds]
-                            mb_logprobs = logprobs[micro_batch_inds]
+                            # Get batch data and ensure they are on the correct device
+                            mb_advantage = advantages[micro_batch_inds].to(device)
+                            mb_responses = responses[micro_batch_inds].to(device)
+                            mb_query_responses = query_responses[micro_batch_inds].to(device)
+                            mb_logprobs = logprobs[micro_batch_inds].to(device)
 
-                            # Forward pass
-                            output = forward(model, mb_query_responses, processing_class.pad_token_id)
+                            # Forward pass with device management
+                            policy_device = self._get_model_device(model)
+                            mb_query_responses_for_policy = self._move_tensors_to_device(mb_query_responses, policy_device)
+                            
+                            output = self._safe_forward_on_device(
+                                model, mb_query_responses_for_policy, policy_device, processing_class.pad_token_id
+                            )
                             logits = output.logits[:, context_length - 1 : -1]
                             logits /= args.temperature + 1e-7
 
-                            # Compute new logprobs
-                            new_logprobs = selective_log_softmax(logits, mb_responses)
+                            # Compute new logprobs with device consistency
+                            mb_responses_for_logits = mb_responses.to(logits.device)
+                            new_logprobs = selective_log_softmax(logits, mb_responses_for_logits)
+                            
+                            # Ensure padding mask is on correct device
+                            padding_mask_micro = padding_mask[micro_batch_inds].to(new_logprobs.device)
                             new_logprobs = torch.masked_fill(
-                                new_logprobs, padding_mask[micro_batch_inds], INVALID_LOGPROB
+                                new_logprobs, padding_mask_micro, INVALID_LOGPROB
                             )
+
+                            # Move results back to main device for computation
+                            new_logprobs = new_logprobs.to(device)
+                            logits = logits.to(device)
 
                             # Compute probability ratios
                             new_ratio = (new_logprobs - mb_logprobs).exp()
@@ -557,7 +665,13 @@ class RLOOTrainer(Trainer):
             gc.collect()
 
             if args.num_sample_generations > 0 and (update - 1) % self.sample_generations_freq == 0:
-                self.generate_completions(sampling=True)
+                try:
+                    self.generate_completions(sampling=True)
+                except Exception as e:
+                    # Log the error but continue training
+                    if self.accelerator.is_main_process:
+                        print(f"⚠️ Sample generation failed: {e}")
+                        print("Continuing with training...")
 
         # HF trainer specifics
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
@@ -607,12 +721,20 @@ class RLOOTrainer(Trainer):
                     postprocessed_query_response = torch.cat((query, postprocessed_response), 1)
 
                     if isinstance(self.reward_model, nn.Module):
+                        # Move input to reward model device for proper computation
+                        reward_model_device = self._get_model_device(self.reward_model)
+                        
+                        # Ensure input is on the same device as reward model
+                        postprocessed_query_response_on_reward_device = postprocessed_query_response.to(reward_model_device)
+                        
                         _, score, _ = get_reward(
                             self.reward_model,
-                            postprocessed_query_response,
+                            postprocessed_query_response_on_reward_device,
                             processing_class.pad_token_id,
                             context_length,
                         )
+                        # Move score back to the original device for consistency
+                        score = score.to(postprocessed_query_response.device)
                     else:
                         score = torch.tensor(
                             self.reward_model(
@@ -648,7 +770,134 @@ class RLOOTrainer(Trainer):
         else:
             model_name = self.args.hub_model_id.split("/")[-1]
         self.create_model_card(model_name=model_name)
-        super()._save_checkpoint(model, trial)
+        
+        # Handle shared tensor issue with safetensors
+        try:
+            super()._save_checkpoint(model, trial)
+        except RuntimeError as e:
+            if "Some tensors share memory" in str(e):
+                print(f"⚠️ Safetensors memory sharing issue detected. Attempting tensor unsharing...")
+                
+                # Try to fix the shared tensor issue by cloning shared weights
+                unwrapped_model = self._get_unwrapped_model()
+                
+                # Check if lm_head and embeddings share memory (common in transformer models)
+                if (hasattr(unwrapped_model, 'lm_head') and 
+                    hasattr(unwrapped_model, 'model') and 
+                    hasattr(unwrapped_model.model, 'embed_tokens')):
+                    
+                    # Check if they share memory
+                    lm_head_ptr = unwrapped_model.lm_head.weight.data_ptr()
+                    embed_ptr = unwrapped_model.model.embed_tokens.weight.data_ptr()
+                    
+                    if lm_head_ptr == embed_ptr:
+                        print("🔧 Fixing shared memory between lm_head and embed_tokens...")
+                        # Clone the lm_head weight to break the sharing
+                        unwrapped_model.lm_head.weight = nn.Parameter(
+                            unwrapped_model.lm_head.weight.clone()
+                        )
+                        print("✅ Tensor sharing resolved")
+                
+                # Try saving again with fixed tensors
+                try:
+                    super()._save_checkpoint(model, trial)
+                    print("✅ Successfully saved with tensor unsharing")
+                except RuntimeError as e2:
+                    # Fallback to PyTorch format if still failing
+                    print(f"⚠️ Still having issues, using PyTorch format fallback...")
+                    
+                    if self.is_world_process_zero():
+                        output_dir = os.path.join(self.args.output_dir, f"checkpoint-{self.state.global_step}")
+                        os.makedirs(output_dir, exist_ok=True)
+                        
+                        # Save with safe_serialization=False to avoid safetensors issues
+                        unwrapped_model.save_pretrained(
+                            output_dir,
+                            safe_serialization=False,  # Use PyTorch format instead of safetensors
+                            max_shard_size="5GB"
+                        )
+                        
+                        # Save tokenizer if available
+                        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+                            self.tokenizer.save_pretrained(output_dir)
+                        elif hasattr(self, 'processing_class') and self.processing_class is not None:
+                            self.processing_class.save_pretrained(output_dir)
+                        
+                        print(f"✅ Model saved to {output_dir} using PyTorch format")
+            else:
+                raise e
+
+    def _get_unwrapped_model(self):
+        """
+        Get the unwrapped model for accessing config and other attributes
+        """
+        if hasattr(self.model, 'module'):
+            # DistributedDataParallel case
+            return self.model.module
+        else:
+            # Regular model case
+            return self.model
+
+    def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
+        """
+        Save model with handling for shared tensor issues.
+        """
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
+        
+        try:
+            # Try the normal save first
+            super().save_model(output_dir, _internal_call)
+        except RuntimeError as e:
+            if "Some tensors share memory" in str(e):
+                print(f"⚠️ Safetensors memory sharing issue detected during save_model. Attempting tensor unsharing...")
+                
+                # Try to fix the shared tensor issue by cloning shared weights
+                unwrapped_model = self._get_unwrapped_model()
+                
+                # Check if lm_head and embeddings share memory (common in transformer models)
+                if (hasattr(unwrapped_model, 'lm_head') and 
+                    hasattr(unwrapped_model, 'model') and 
+                    hasattr(unwrapped_model.model, 'embed_tokens')):
+                    
+                    # Check if they share memory
+                    lm_head_ptr = unwrapped_model.lm_head.weight.data_ptr()
+                    embed_ptr = unwrapped_model.model.embed_tokens.weight.data_ptr()
+                    
+                    if lm_head_ptr == embed_ptr:
+                        print("🔧 Fixing shared memory between lm_head and embed_tokens...")
+                        # Clone the lm_head weight to break the sharing
+                        unwrapped_model.lm_head.weight = nn.Parameter(
+                            unwrapped_model.lm_head.weight.clone()
+                        )
+                        print("✅ Tensor sharing resolved")
+                
+                # Try saving again with fixed tensors
+                try:
+                    super().save_model(output_dir, _internal_call)
+                    print("✅ Successfully saved with tensor unsharing")
+                except RuntimeError as e2:
+                    # Fallback to PyTorch format if still failing
+                    print(f"⚠️ Still having issues, using PyTorch format fallback...")
+                    
+                    if self.is_world_process_zero():
+                        os.makedirs(output_dir, exist_ok=True)
+                        
+                        # Save with PyTorch format instead of safetensors
+                        unwrapped_model.save_pretrained(
+                            output_dir,
+                            safe_serialization=False,  # Use PyTorch format
+                            max_shard_size="5GB"
+                        )
+                        
+                        # Save tokenizer if available
+                        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+                            self.tokenizer.save_pretrained(output_dir)
+                        elif hasattr(self, 'processing_class') and self.processing_class is not None:
+                            self.processing_class.save_pretrained(output_dir)
+                        
+                        print(f"✅ Model saved to {output_dir} using PyTorch format (shared tensor workaround)")
+            else:
+                raise e
 
     def create_model_card(
         self,
@@ -670,8 +919,11 @@ class RLOOTrainer(Trainer):
         if not self.is_world_process_zero():
             return
 
-        if hasattr(self.model.config, "_name_or_path") and not os.path.isdir(self.model.config._name_or_path):
-            base_model = self.model.config._name_or_path
+        # Get unwrapped model for config access
+        unwrapped_model = self._get_unwrapped_model()
+
+        if hasattr(unwrapped_model.config, "_name_or_path") and not os.path.isdir(unwrapped_model.config._name_or_path):
+            base_model = unwrapped_model.config._name_or_path
         else:
             base_model = None
 
@@ -683,7 +935,7 @@ class RLOOTrainer(Trainer):
         else:
             tags = set(tags)
 
-        if hasattr(self.model.config, "unsloth_version"):
+        if hasattr(unwrapped_model.config, "unsloth_version"):
             tags.add("unsloth")
 
         tags.update(self._tag_names)
