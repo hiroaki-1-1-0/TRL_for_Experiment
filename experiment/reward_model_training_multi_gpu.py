@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Multi-GPU Reward Model Training Script - Simplified Working Version
+Multi-GPU Reward Model Training Script - Fixed Version
 """
 
 import os
@@ -17,8 +17,14 @@ os.environ.setdefault('NCCL_SHM_DISABLE', '1')
 os.environ.setdefault('NCCL_IB_DISABLE', '1')
 os.environ.setdefault('NCCL_P2P_LEVEL', 'LOC')
 os.environ.setdefault('NCCL_DEBUG', 'WARN')
+# Additional NCCL settings for shared memory issues
+os.environ.setdefault('NCCL_BUFFSIZE', '2097152')
+os.environ.setdefault('NCCL_MAX_NCHANNELS', '2')
+os.environ.setdefault('NCCL_MIN_NCHANNELS', '2')
+os.environ.setdefault('NCCL_TREE_THRESHOLD', '0')
+os.environ.setdefault('NCCL_ALGO', 'Tree')
 # Memory optimization settings
-os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True,max_split_size_mb:256')
 os.environ.setdefault('CUDA_LAUNCH_BLOCKING', '0')
 
 import torch
@@ -178,16 +184,16 @@ def prepare_dataset() -> Dataset:
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-4B")
-    parser.add_argument("--output_dir", type=str, default="experiment/models/qwen3_4b_reward_model")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-1.7B")
+    parser.add_argument("--output_dir", type=str, default="experiment/models/qwen3_1.7b_reward_model")
     parser.add_argument("--num_train_epochs", type=int, default=1)
-    parser.add_argument("--per_device_train_batch_size", type=int, default=4)  # Reduced from 12
-    parser.add_argument("--per_device_eval_batch_size", type=int, default=2)   # Reduced from 6
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)  # Increased to maintain effective batch size
+    parser.add_argument("--per_device_train_batch_size", type=int, default=8)  # Reduced for shared memory issues
+    parser.add_argument("--per_device_eval_batch_size", type=int, default=2)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-5)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_ratio", type=float, default=0.1)
-    parser.add_argument("--max_length", type=int, default=1024)                # Reduced from 2048
+    parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--use_peft", action="store_true", default=True)
     parser.add_argument("--lora_r", type=int, default=64)
     parser.add_argument("--logging_steps", type=int, default=10)
@@ -200,10 +206,12 @@ def main():
     
     args = parser.parse_args()
     
-    # Initialize accelerator
+    # Initialize accelerator with reduced memory pressure
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision="bf16" if args.bf16 else "no",
+        # Reduce communication overhead
+        split_batches=True,
     )
     
     rank = accelerator.process_index
@@ -242,9 +250,9 @@ def main():
     # Load model and tokenizer
     model, tokenizer = create_reward_model(args.model_name, args.use_peft, args.lora_r)
     
-    # Prepare dataset
-    with accelerator.local_main_process_first():
-        reward_dataset = prepare_dataset()
+    # Prepare dataset with reduced memory usage
+    print("Loading and preparing dataset...")
+    reward_dataset = prepare_dataset()
     
     # Ensure we have a proper Dataset object
     if not isinstance(reward_dataset, Dataset):
@@ -284,16 +292,18 @@ def main():
         greater_is_better=False,
         bf16=args.bf16,
         tf32=args.tf32,
-        dataloader_num_workers=2,  # Reduced from 4
+        dataloader_num_workers=1,  # Reduced to minimize memory pressure
         dataloader_pin_memory=False,
         remove_unused_columns=False,
         report_to=args.report_to,
-        run_name=args.run_name or f"qwen3_4b_reward_model_{rank}",
+        run_name=args.run_name or f"qwen3_1.7b_reward_model_{rank}",
         max_length=args.max_length,
         # Memory optimization settings
         gradient_checkpointing=True,
         dataloader_drop_last=True,
         optim="adamw_torch_fused",  # More memory efficient optimizer
+        # Reduce communication frequency
+        logging_strategy="steps",
     )
     
     # Create trainer
@@ -332,4 +342,4 @@ def main():
         print(f"Training completed! Model saved to {args.output_dir}")
 
 if __name__ == "__main__":
-    main() 
+    main()

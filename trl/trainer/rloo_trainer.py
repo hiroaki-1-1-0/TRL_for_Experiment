@@ -73,6 +73,15 @@ INVALID_LOGPROB = 1.0
 class RLOOTrainer(Trainer):
     _tag_names = ["trl", "rloo"]
 
+    def _get_model_device(self, model):
+        """
+        Get the device of a model safely
+        """
+        try:
+            return next(model.parameters()).device
+        except StopIteration:
+            return torch.device('cuda:0')  # fallback
+
     def __init__(
         self,
         config: RLOOConfig,
@@ -99,6 +108,14 @@ class RLOOTrainer(Trainer):
         args = config
         self.processing_class = processing_class
         self.policy = policy
+
+        # Multi-GPU device mapping setup - auto-detect from models
+        self.policy_device = self._get_model_device(policy)
+        self.ref_policy_device = self._get_model_device(ref_policy) 
+        if isinstance(reward_model, nn.Module):
+            self.reward_model_device = self._get_model_device(reward_model)
+        else:
+            self.reward_model_device = self.policy_device
 
         # Define the collator if not provided
         if data_collator is None:
@@ -230,10 +247,47 @@ class RLOOTrainer(Trainer):
                 self.ref_policy, args.per_device_train_batch_size, args.fp16, args.bf16
             )
             self.deepspeed = self.model
+
+    def _move_tensors_to_device(self, tensors, target_device):
+        """
+        Safely move tensors to target device, handling various tensor types
+        """
+        if tensors is None:
+            return tensors
+        
+        if torch.is_tensor(tensors):
+            return tensors.to(target_device, non_blocking=True)
+        elif isinstance(tensors, dict):
+            return {k: self._move_tensors_to_device(v, target_device) for k, v in tensors.items()}
+        elif isinstance(tensors, (list, tuple)):
+            return type(tensors)(self._move_tensors_to_device(item, target_device) for item in tensors)
         else:
-            self.ref_policy = self.ref_policy.to(self.accelerator.device)
-            if isinstance(self.reward_model, nn.Module):
-                self.reward_model = self.reward_model.to(self.accelerator.device)
+            return tensors
+
+    def _safe_forward_on_device(self, model, input_data, target_device, pad_token_id):
+        """
+        Safely perform forward pass on specific device
+        """
+        # Move input data to target device
+        input_data_on_device = self._move_tensors_to_device(input_data, target_device)
+        
+        # Ensure model is on correct device
+        if isinstance(model, nn.Module):
+            model_device = self._get_model_device(model)
+            if model_device != target_device:
+                # If model is not on target device, move input back to model device
+                input_data_on_device = self._move_tensors_to_device(input_data_on_device, model_device)
+                target_device = model_device
+        
+        # Perform forward pass
+        with torch.cuda.device(target_device):
+            if torch.is_tensor(input_data_on_device):
+                attention_mask = (input_data_on_device != pad_token_id).long()
+                output = model(input_ids=input_data_on_device, attention_mask=attention_mask)
+            else:
+                output = model(**input_data_on_device)
+        
+        return output
 
     def get_train_dataloader(self) -> DataLoader:
         return self.dataloader
@@ -336,10 +390,20 @@ class RLOOTrainer(Trainer):
                     del logits
                     empty_cache()
 
-                    ref_output = forward(ref_policy, query_response, processing_class.pad_token_id)
+                    # Reference policy forward pass with device management
+                    ref_policy_device = self._get_model_device(ref_policy)
+                    query_response_for_ref = self._move_tensors_to_device(query_response, ref_policy_device)
+                    
+                    ref_output = self._safe_forward_on_device(
+                        ref_policy, query_response_for_ref, ref_policy_device, processing_class.pad_token_id
+                    )
                     ref_logits = ref_output.logits[:, context_length - 1 : -1]
                     ref_logits /= args.temperature + 1e-7
-                    ref_logprob = selective_log_softmax(ref_logits, response)
+                    ref_logprob = selective_log_softmax(ref_logits, response.to(ref_logits.device))
+                    
+                    # Move results back to main device if needed
+                    ref_logprob = ref_logprob.to(device)
+                    
                     del ref_output, ref_logits
                     empty_cache()
 
@@ -350,14 +414,23 @@ class RLOOTrainer(Trainer):
                             args.stop_token_id, processing_class.pad_token_id, response
                         )
 
-                    # Response Processing 2. run reward model on the truncated responses
+                    # Response Processing 2. run reward model on the truncated responses with device management
                     postprocessed_query_response = torch.cat((query, postprocessed_response), 1)
                     sequence_length = first_true_indices(postprocessed_response == processing_class.pad_token_id) - 1
 
                     if isinstance(reward_model, nn.Module):
-                        _, score, _ = get_reward(
-                            reward_model, postprocessed_query_response, processing_class.pad_token_id, context_length
+                        reward_model_device = self._get_model_device(reward_model)
+                        postprocessed_query_response_for_reward = self._move_tensors_to_device(
+                            postprocessed_query_response, reward_model_device
                         )
+                        
+                        _, score, _ = get_reward(
+                            reward_model, postprocessed_query_response_for_reward, 
+                            processing_class.pad_token_id, context_length
+                        )
+                        
+                        # Move score back to main device
+                        score = score.to(device)
                     else:
                         score = torch.tensor(
                             reward_model(
@@ -366,13 +439,13 @@ class RLOOTrainer(Trainer):
                             dtype=torch.float,
                         ).to(device)
 
-                    # Store batch results
-                    responses.append(response)
-                    postprocessed_responses.append(postprocessed_response)
-                    logprobs.append(logprob)
-                    ref_logprobs.append(ref_logprob)
-                    sequence_lengths.append(sequence_length)
-                    scores.append(score)
+                    # Store batch results (ensure all tensors are on main device)
+                    responses.append(response.to(device))
+                    postprocessed_responses.append(postprocessed_response.to(device))
+                    logprobs.append(logprob.to(device))
+                    ref_logprobs.append(ref_logprob.to(device))
+                    sequence_lengths.append(sequence_length.to(device))
+                    scores.append(score.to(device))
 
                 # Concatenate all batched results
                 responses = torch.cat(responses, 0)
@@ -455,22 +528,35 @@ class RLOOTrainer(Trainer):
                             micro_batch_end = micro_batch_start + args.per_device_train_batch_size
                             micro_batch_inds = mini_batch_inds[micro_batch_start:micro_batch_end]
 
-                            # Get batch data
-                            mb_advantage = advantages[micro_batch_inds]
-                            mb_responses = responses[micro_batch_inds]
-                            mb_query_responses = query_responses[micro_batch_inds]
-                            mb_logprobs = logprobs[micro_batch_inds]
+                            # Get batch data and ensure they are on the correct device
+                            mb_advantage = advantages[micro_batch_inds].to(device)
+                            mb_responses = responses[micro_batch_inds].to(device)
+                            mb_query_responses = query_responses[micro_batch_inds].to(device)
+                            mb_logprobs = logprobs[micro_batch_inds].to(device)
 
-                            # Forward pass
-                            output = forward(model, mb_query_responses, processing_class.pad_token_id)
+                            # Forward pass with device management
+                            policy_device = self._get_model_device(model)
+                            mb_query_responses_for_policy = self._move_tensors_to_device(mb_query_responses, policy_device)
+                            
+                            output = self._safe_forward_on_device(
+                                model, mb_query_responses_for_policy, policy_device, processing_class.pad_token_id
+                            )
                             logits = output.logits[:, context_length - 1 : -1]
                             logits /= args.temperature + 1e-7
 
-                            # Compute new logprobs
-                            new_logprobs = selective_log_softmax(logits, mb_responses)
+                            # Compute new logprobs with device consistency
+                            mb_responses_for_logits = mb_responses.to(logits.device)
+                            new_logprobs = selective_log_softmax(logits, mb_responses_for_logits)
+                            
+                            # Ensure padding mask is on correct device
+                            padding_mask_micro = padding_mask[micro_batch_inds].to(new_logprobs.device)
                             new_logprobs = torch.masked_fill(
-                                new_logprobs, padding_mask[micro_batch_inds], INVALID_LOGPROB
+                                new_logprobs, padding_mask_micro, INVALID_LOGPROB
                             )
+
+                            # Move results back to main device for computation
+                            new_logprobs = new_logprobs.to(device)
+                            logits = logits.to(device)
 
                             # Compute probability ratios
                             new_ratio = (new_logprobs - mb_logprobs).exp()

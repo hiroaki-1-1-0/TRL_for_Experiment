@@ -149,13 +149,13 @@ def setup_models_ultimate_mapping(model_config: ModelConfig, training_args: RLOO
                                  reward_model_path: Optional[str] = None):
     """Setup models with ultimate device mapping strategy"""
     
-    policy_model_name = "Qwen/Qwen3-4B"
+    policy_model_name = "Qwen/Qwen3-1.7B"  # Updated to 1.7B
     
     if reward_model_path:
         reward_model_name = reward_model_path
         print(f"Using trained reward model from: {reward_model_name}")
     else:
-        reward_model_name = "experiment/models/qwen3_4b_reward_model"
+        reward_model_name = "experiment/models/qwen3_1.7b_reward_model"  # Updated path
         print(f"Using default trained reward model path: {reward_model_name}")
     
     print(f"Loading tokenizer from {policy_model_name}")
@@ -320,7 +320,6 @@ class UltimateRLOOTrainer(RLOOTrainer):
         
         # ULTIMATE: Complete TRL functions override
         from trl.trainer import utils
-        from trl.trainer.rloo_trainer import selective_log_softmax
         original_forward = utils.forward
         
         def ultimate_forward(model, input_ids, pad_token_id):
@@ -427,13 +426,13 @@ def main():
     # Get reward model path
     reward_model_path = getattr(script_args, 'reward_model_path', None)
     if reward_model_path is None:
-        reward_model_path = "experiment/models/qwen3_4b_reward_model"
+        reward_model_path = "experiment/models/qwen3_1.7b_reward_model"  # Updated path
     
     # Remove output directory if it exists
     shutil.rmtree(training_args.output_dir, ignore_errors=True)
     
     print("📋 ULTIMATE Training Configuration:")
-    print(f"  Policy Model: Qwen/Qwen3-4B")
+    print(f"  Policy Model: Qwen/Qwen3-1.7B")  # Updated
     print(f"  Reward Model: {reward_model_path}")
     print(f"  Dataset: nvidia/HelpSteer3 (English only)")
     print(f"  Output Directory: {training_args.output_dir}")
@@ -522,4 +521,4 @@ def main():
     print("🎉 ULTIMATE Multi-GPU RLOO training completed successfully!")
 
 if __name__ == "__main__":
-    main() 
+    main()
