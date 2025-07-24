@@ -45,7 +45,7 @@ RLOO_GPUS="0,1,2,3,4,5,6"         # 7 GPUs for RLOO
 REWARD_MODEL_NUM_GPUS=4
 RLOO_NUM_GPUS=7
 REWARD_MODEL_DIR="experiment/models/qwen3_1.7b_reward_model"
-RLOO_MODEL_DIR="experiment/models/qwen3_1.7b_rloo_model"
+RLOO_MODEL_DIR="experiment/models/qwen3_1.7b_rloo_model_chinese_01"
 LOG_DIR="./logs"
 
 # ========================================
@@ -55,7 +55,7 @@ cleanup() {
     echo "Cleaning up..."
     # Kill any remaining processes
     pkill -f "reward_model_training_multi_gpu.py" 2>/dev/null || true
-    pkill -f "rloo_helpsteer_training_multi_gpu.py" 2>/dev/null || true
+    pkill -f "rloo_helpsteer_training_multi_gpu_chinese_01.py" 2>/dev/null || true
     pkill -f "tensorboard" 2>/dev/null || true
     
     # Clean up NCCL shared memory segments if any exist
@@ -163,7 +163,7 @@ train_rloo() {
         --standalone \
         --nproc_per_node=$actual_rloo_num_gpus \
         --max_restarts=0 \
-        experiment/rloo_helpsteer_training_multi_gpu.py \
+        experiment/rloo_helpsteer_training_multi_gpu_chinese_01.py \
         --reward_model_path "$REWARD_MODEL_DIR" \
         --output_dir "$RLOO_MODEL_DIR" \
         --per_device_train_batch_size $per_device_batch_size \
