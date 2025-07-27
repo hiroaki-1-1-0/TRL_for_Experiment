@@ -16,9 +16,7 @@ import json
 os.environ.setdefault('NCCL_SHM_DISABLE', '1')
 os.environ.setdefault('NCCL_IB_DISABLE', '1')
 os.environ.setdefault('NCCL_P2P_LEVEL', 'LOC')
-os.environ['NCCL_DEBUG'] = 'INFO'
-os.environ['NCCL_ALGO'] = 'Ring,Tree'
-os.environ['NCCL_P2P_DISABLE'] = '1'
+os.environ.setdefault('NCCL_DEBUG', 'WARN')
 # Memory optimization settings
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 os.environ.setdefault('CUDA_LAUNCH_BLOCKING', '0')
@@ -33,6 +31,9 @@ from transformers.trainer_utils import set_seed
 from trl import RewardTrainer, RewardConfig
 from peft import LoraConfig, get_peft_model, TaskType
 from accelerate import Accelerator
+
+# Import DDP utilities
+from ddp_utils import save_model_without_ddp_prefix
 
 def setup_logging(rank: int = 0) -> logging.Logger:
     """Setup logging for distributed training"""
@@ -316,7 +317,20 @@ def main():
     # Save the model
     if rank == 0:
         print("Saving final model...")
-        trainer.save_model()
+        
+        # Use DDP-aware saving to prevent prefix issues
+        try:
+            save_model_without_ddp_prefix(
+                model=trainer.model,
+                output_dir=args.output_dir,
+                tokenizer=tokenizer,
+                safe_serialization=True
+            )
+            print("✅ Model saved using DDP-aware method")
+        except Exception as e:
+            print(f"⚠️ DDP-aware saving failed: {e}")
+            print("Falling back to standard saving...")
+            trainer.save_model()
         
         # Save training info
         training_info = {

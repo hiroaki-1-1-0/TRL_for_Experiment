@@ -45,7 +45,7 @@ RLOO_GPUS="0,1,2,3,4,5,6"         # 7 GPUs for RLOO
 REWARD_MODEL_NUM_GPUS=4
 RLOO_NUM_GPUS=7
 REWARD_MODEL_DIR="experiment/models/qwen3_1.7b_reward_model"
-RLOO_MODEL_DIR="experiment/models/qwen3_1.7b_rloo_model_chinese_01"
+RLOO_MODEL_DIR="experiment/models/qwen3_gemma_2b_rloo_model"
 LOG_DIR="./logs"
 
 # ========================================
@@ -55,7 +55,7 @@ cleanup() {
     echo "Cleaning up..."
     # Kill any remaining processes
     pkill -f "reward_model_training_multi_gpu.py" 2>/dev/null || true
-    pkill -f "rloo_helpsteer_training_multi_gpu_chinese_01.py" 2>/dev/null || true
+    pkill -f "rloo_helpsteer_training_multi_gpu.py" 2>/dev/null || true
     pkill -f "tensorboard" 2>/dev/null || true
     
     # Clean up NCCL shared memory segments if any exist
@@ -149,6 +149,9 @@ train_rloo() {
     local rollout_batch_size=6      # Keep consistent with batch size
     local rloo_k=6                  # Use 6 to match number of available GPUs
     
+    # Use Hugging Face reward model instead of local one for RLOO training
+    local huggingface_reward_model="weqweasdas/RM-Gemma-2B"
+    
     echo "Multi-GPU RLOO Parameters (Anti-Deadlock Mode):"
     echo "  Batch size per device: $per_device_batch_size"
     echo "  Gradient accumulation: $gradient_accumulation_steps" 
@@ -157,14 +160,15 @@ train_rloo() {
     echo "  RLOO K: $rloo_k"
     echo "  Actual GPUs used: $actual_rloo_num_gpus"
     echo "  Divisibility check: $((per_device_batch_size * gradient_accumulation_steps)) ÷ $rloo_k = $((per_device_batch_size * gradient_accumulation_steps / rloo_k))"
+    echo "  Reward Model: $huggingface_reward_model (Hugging Face)"
     echo "  Using fixed script with timeout protection and anti-deadlock measures"
     
     torchrun \
         --standalone \
         --nproc_per_node=$actual_rloo_num_gpus \
         --max_restarts=0 \
-        experiment/rloo_helpsteer_training_multi_gpu_chinese_01.py \
-        --reward_model_path "$REWARD_MODEL_DIR" \
+        experiment/rloo_helpsteer_training_multi_gpu.py \
+        --reward_model_path "$huggingface_reward_model" \
         --output_dir "$RLOO_MODEL_DIR" \
         --per_device_train_batch_size $per_device_batch_size \
         --gradient_accumulation_steps $gradient_accumulation_steps \
@@ -226,11 +230,8 @@ case "${1:-both}" in
         train_reward_model
         ;;
     "rloo")
-        if [ ! -d "$REWARD_MODEL_DIR" ]; then
-            echo "Error: Reward model not found at $REWARD_MODEL_DIR"
-            echo "Please train the reward model first with: $0 reward"
-            exit 1
-        fi
+        # Note: Using Hugging Face reward model, no local directory check needed
+        echo "Using Hugging Face reward model: weqweasdas/RM-Gemma-2B"
         start_tensorboard
         train_rloo
         ;;
@@ -254,12 +255,12 @@ case "${1:-both}" in
     *)
         echo "Usage: $0 [reward|rloo|both]"
         echo "  reward - Train only the reward model (uses GPUs $REWARD_MODEL_GPUS)"
-        echo "  rloo   - Train only the RLOO model (uses GPUs $RLOO_GPUS, requires existing reward model)"
+        echo "  rloo   - Train only the RLOO model (uses GPUs $RLOO_GPUS, uses Hugging Face reward model)"
         echo "  both   - Train both models sequentially (default)"
         echo ""
         echo "This script uses adaptive GPU allocation:"
         echo "  - Reward Model: $REWARD_MODEL_NUM_GPUS GPUs ($REWARD_MODEL_GPUS)"
-        echo "  - RLOO Training: $RLOO_NUM_GPUS GPUs ($RLOO_GPUS)"
+        echo "  - RLOO Training: 6 GPUs (0,1,2,3,4,5) with weqweasdas/RM-Gemma-2B reward model"
         echo "Using Qwen3-1.7B model for optimal performance and memory efficiency."
         exit 1
         ;;

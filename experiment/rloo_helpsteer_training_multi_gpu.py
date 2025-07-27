@@ -56,6 +56,9 @@ sys.path.insert(0, project_root)
 # Now import the local RLOOTrainer (will override any installed version)
 from trl.trainer.rloo_trainer import RLOOTrainer
 
+# Import DDP utilities
+from ddp_utils import save_model_without_ddp_prefix, load_ddp_model_correctly
+
 print(f"🔧 Using LOCAL RLOOTrainer with DistributedDataParallel fixes")
 print(f"✅ Has _get_unwrapped_model method: {hasattr(RLOOTrainer, '_get_unwrapped_model')}")
 
@@ -335,7 +338,7 @@ def load_models_with_timeout(args, tokenizer, rank=0, world_size=1):
     print(f"  Reference policy: {ref_policy_device}")
     print(f"  Policy model: {policy_device}")
     
-    # Load reward model with memory optimization
+    # Load reward model with memory optimization and DDP support
     print(f"🔄 Loading reward model from {args.reward_model_path}")
     timeout_handler.check_timeout("before reward model loading")
 
@@ -346,15 +349,31 @@ def load_models_with_timeout(args, tokenizer, rank=0, world_size=1):
     except (ValueError, IndexError):
         reward_max_memory = None
 
-    reward_model = AutoModelForSequenceClassification.from_pretrained(
-        args.reward_model_path,
-        torch_dtype=torch.bfloat16,
-        device_map=reward_device,
-        trust_remote_code=True,
-        num_labels=1,
-        low_cpu_mem_usage=True,
-        max_memory=reward_max_memory  # Safe memory limit
-    )
+    # Try DDP-aware loading first, fallback to standard loading
+    try:
+        reward_model = load_ddp_model_correctly(
+            args.reward_model_path,
+            AutoModelForSequenceClassification,
+            torch_dtype=torch.bfloat16,
+            device_map=reward_device,
+            trust_remote_code=True,
+            num_labels=1,
+            low_cpu_mem_usage=True,
+            max_memory=reward_max_memory
+        )
+        print("✅ Reward model loaded with DDP-aware loader")
+    except Exception as e:
+        print(f"⚠️ DDP-aware loading failed: {e}")
+        print("Falling back to standard loading...")
+        reward_model = AutoModelForSequenceClassification.from_pretrained(
+            args.reward_model_path,
+            torch_dtype=torch.bfloat16,
+            device_map=reward_device,
+            trust_remote_code=True,
+            num_labels=1,
+            low_cpu_mem_usage=True,
+            max_memory=reward_max_memory  # Safe memory limit
+        )
     timeout_handler.check_timeout("after reward model loading")
     
     # Load reference policy with memory optimization
@@ -558,8 +577,22 @@ def main():
         # Save final model
         if rank == 0:
             print("💾 Saving trained model...")
-            trainer.save_model(config.output_dir)
-            tokenizer.save_pretrained(config.output_dir)
+            
+            # Use DDP-aware saving to prevent prefix issues
+            try:
+                save_model_without_ddp_prefix(
+                    model=trainer.model,
+                    output_dir=config.output_dir,
+                    tokenizer=tokenizer,
+                    safe_serialization=True
+                )
+                print("✅ Model saved using DDP-aware method")
+            except Exception as e:
+                print(f"⚠️ DDP-aware saving failed: {e}")
+                print("Falling back to standard saving...")
+                trainer.save_model(config.output_dir)
+                tokenizer.save_pretrained(config.output_dir)
+            
             print("✅ Training completed successfully!")
         
     except Exception as e:
